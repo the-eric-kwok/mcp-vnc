@@ -25,4 +25,14 @@ const config: VncConfig = {
 };
 
 const server = new VncMcpServer(config);
+
+function shutdown(signal: NodeJS.Signals) {
+  console.error(`Received ${signal}, shutting down mcp-vnc...`);
+  server.close();
+  process.exit(0);
+}
+
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);
+
 server.run().catch(console.error);

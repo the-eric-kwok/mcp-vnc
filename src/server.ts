@@ -230,9 +230,14 @@ export class VncMcpServer {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
       console.error(`mcp-vnc ${packageJson.version} started!`);
+      await this.vncManager.connect();
     } catch (error) {
       console.error('Failed to start mcp-vnc: ', error);
       process.exit(1);
     }
+  }
+
+  close() {
+    this.vncManager.close();
   }
 }

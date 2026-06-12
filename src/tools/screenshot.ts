@@ -194,7 +194,7 @@ export async function handleScreenshot(
     
     try {
       // Request full frame update first
-      client.requestFrameUpdate(true, 0, 0, width, height);
+      client.requestFrameUpdate(true, 0, 0, 0, width, height);
       
       // Wait for frame update event with shorter timeout
       framebuffer = await new Promise<Buffer>((resolve, reject) => {
