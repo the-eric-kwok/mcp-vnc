@@ -2,6 +2,10 @@
 import { VncClient } from '@computernewb/nodejs-rfb';
 import { VncConfig, CoordinateValidation } from '../types.js';
 
+type ConnectionOptions = {
+  waitForFramebuffer?: boolean;
+};
+
 export class VncConnectionManager {
   private config: VncConfig;
   private client: VncClient | null = null;
@@ -18,9 +22,23 @@ export class VncConnectionManager {
   }
 
   // Execute a callback with the persistent VNC connection.
-  async executeWithConnection<T>(callback: (client: VncClient) => Promise<T>): Promise<T> {
+  async executeWithConnection<T>(
+    callback: (client: VncClient) => Promise<T>,
+    options: ConnectionOptions = {}
+  ): Promise<T> {
     const client = await this.getClient();
-    return callback(client);
+    if (options.waitForFramebuffer) {
+      await this.waitForFramebuffer(client);
+    }
+
+    try {
+      return await callback(client);
+    } catch (error) {
+      if (this.shouldInvalidateConnection(error)) {
+        this.invalidateConnection(client);
+      }
+      throw error;
+    }
   }
 
   async getClient(): Promise<VncClient> {
@@ -53,6 +71,78 @@ export class VncConnectionManager {
     } catch (error) {
       console.error('Error closing VNC client:', error);
     }
+  }
+
+  private hasUsableFramebuffer(client: VncClient | null): boolean {
+    if (!client) {
+      return false;
+    }
+
+    const screenWidth = client.clientWidth || 0;
+    const screenHeight = client.clientHeight || 0;
+    return screenWidth > 0 &&
+      screenHeight > 0 &&
+      !!client.fb &&
+      client.fb.length >= screenWidth * screenHeight * 4;
+  }
+
+  private async waitForFramebuffer(client: VncClient, timeoutMs = 3000): Promise<void> {
+    if (this.hasUsableFramebuffer(client)) {
+      return;
+    }
+
+    const screenWidth = client.clientWidth || 0;
+    const screenHeight = client.clientHeight || 0;
+
+    if (!screenWidth || !screenHeight) {
+      throw new Error(`Invalid VNC screen dimensions: ${screenWidth}x${screenHeight}`);
+    }
+
+    try {
+      client.requestFrameUpdate(true, 0, 0, 0, screenWidth, screenHeight);
+    } catch (error) {
+      console.warn('Frame request failed:', error);
+    }
+
+    await new Promise<void>((resolve) => {
+      let timeoutId: NodeJS.Timeout | null = null;
+
+      const finish = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        client.removeListener('frameUpdated', finish);
+        client.removeListener('firstFrameUpdate', finish);
+        resolve();
+      };
+
+      client.once('frameUpdated', finish);
+      client.once('firstFrameUpdate', finish);
+      timeoutId = setTimeout(finish, timeoutMs);
+    });
+
+    if (!this.hasUsableFramebuffer(client)) {
+      throw new Error('VNC framebuffer timeout');
+    }
+  }
+
+  private invalidateConnection(client: VncClient): void {
+    if (this.client === client) {
+      this.client = null;
+      this.isReady = false;
+    }
+
+    try {
+      client.disconnect();
+    } catch (error) {
+      console.error('Error disconnecting invalid VNC client:', error);
+    }
+  }
+
+  private shouldInvalidateConnection(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /framebuffer|socket|protocol|write|closed|disconnect|EPIPE|ECONNRESET/i.test(message);
   }
 
   private async createConnection(): Promise<VncClient> {
@@ -162,7 +252,7 @@ export class VncConnectionManager {
       });
 
       vncClient.on('frameUpdated', () => {
-        if (!hasReceivedInitialFramebuffer) {
+        if (!hasReceivedInitialFramebuffer && this.hasUsableFramebuffer(vncClient)) {
           hasReceivedInitialFramebuffer = true;
           console.error('Received initial framebuffer, connection ready');
           this.client = vncClient;
@@ -174,7 +264,7 @@ export class VncConnectionManager {
       });
 
       vncClient.on('firstFrameUpdate', () => {
-        if (!hasReceivedInitialFramebuffer) {
+        if (!hasReceivedInitialFramebuffer && this.hasUsableFramebuffer(vncClient)) {
           hasReceivedInitialFramebuffer = true;
           console.error('Received initial framebuffer, connection ready');
           this.client = vncClient;

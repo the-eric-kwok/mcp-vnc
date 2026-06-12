@@ -3,10 +3,17 @@
 import { VncMcpServer } from './server.js';
 import { VncConfig } from './types.js';
 
+function isTransientVncFramebufferError(error: { message?: string; code?: string } | undefined): boolean {
+  return !!error && (
+    error.message?.includes('invalid distance too far back') ||
+    error.code === 'ERR_OUT_OF_RANGE' ||
+    error.code === 'Z_DATA_ERROR'
+  );
+}
+
 process.on('uncaughtException', (error) => {
-  if (error.message?.includes('invalid distance too far back') || 
-      (error as any).code === 'Z_DATA_ERROR') {
-    console.error('VNC compression error detected:', error.message);
+  if (isTransientVncFramebufferError(error)) {
+    console.error('Transient VNC framebuffer error ignored:', error.message);
     return;
   }
   
@@ -15,6 +22,12 @@ process.on('uncaughtException', (error) => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
+  const error = reason as { message?: string; code?: string } | undefined;
+  if (isTransientVncFramebufferError(error)) {
+    console.error('Transient VNC framebuffer error ignored:', error?.message);
+    return;
+  }
+
   console.error('Unhandled rejection at:', promise, 'reason:', reason);
 });
 
