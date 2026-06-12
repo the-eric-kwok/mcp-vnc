@@ -6,6 +6,35 @@ type ConnectionOptions = {
   waitForFramebuffer?: boolean;
 };
 
+let hasPatchedAppleRfbVersion = false;
+
+function patchAppleRfbProtocolVersion() {
+  if (hasPatchedAppleRfbVersion) {
+    return;
+  }
+
+  const prototype = VncClient.prototype as any;
+  const handleVersion = prototype._handleVersion;
+  if (typeof handleVersion !== 'function') {
+    return;
+  }
+
+  prototype._handleVersion = async function () {
+    const version = (await this._socketBuffer.readNBytesOffset(12)).toString('ascii');
+    if (version !== 'RFB 003.889\n') {
+      this._socketBuffer.offset -= 12;
+      return handleVersion.call(this);
+    }
+
+    this._log('Sending 3.8 for Apple Screen Sharing', true);
+    this._connection?.write('RFB 003.008\n');
+    this._version = '3.8';
+    this._waitingSecurityTypes = true;
+  };
+
+  hasPatchedAppleRfbVersion = true;
+}
+
 export class VncConnectionManager {
   private config: VncConfig;
   private client: VncClient | null = null;
@@ -154,6 +183,8 @@ export class VncConnectionManager {
     this.isReady = false;
 
     this.connectPromise = new Promise((resolve, reject) => {
+      patchAppleRfbProtocolVersion();
+
       const vncClient = new VncClient({
         debug: false,
         encodings: [
@@ -230,7 +261,7 @@ export class VncConnectionManager {
           return;
         }
 
-        if (attempt >= 20) {
+        if (attempt >= 100) {
           failConnection(new Error('VNC screen dimensions were not available after authentication'));
           return;
         }
@@ -247,7 +278,7 @@ export class VncConnectionManager {
       vncClient.on('authenticated', () => {
         const screenWidth = vncClient.clientWidth || 0;
         const screenHeight = vncClient.clientHeight || 0;
-        console.error(`VNC authenticated, screen: ${screenWidth}x${screenHeight}`);
+        console.error(`VNC authenticated, initial screen: ${screenWidth}x${screenHeight}`);
         requestInitialFrameWhenSized();
       });
 
@@ -308,7 +339,10 @@ export class VncConnectionManager {
         host: this.config.host,
         port: this.config.port,
         path: null,
-        auth: this.config.password ? { password: this.config.password } : undefined
+        auth: this.config.password ? {
+          password: this.config.password,
+          username: this.config.username
+        } : undefined
       };
 
       vncClient.connect(connectionOptions);

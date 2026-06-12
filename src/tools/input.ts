@@ -9,7 +9,15 @@ const POINTER_BUTTONS = {
   'middle': 0x02
 };
 
+const SCROLL_BUTTONS = {
+  'up': 0x08,
+  'down': 0x10,
+  'left': 0x20,
+  'right': 0x40
+};
+
 type PointerButton = keyof typeof POINTER_BUTTONS;
+type ScrollDirection = keyof typeof SCROLL_BUTTONS;
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -72,6 +80,41 @@ export async function handleMoveMouse(
 
     return {
       content: [{ type: 'text', text: `Moved mouse to (${args.x}, ${args.y})` }]
+    };
+  });
+}
+
+export async function handleScroll(
+  vncManager: VncConnectionManager,
+  args: { x: number; y: number; direction?: ScrollDirection; amount?: number }
+) {
+  return vncManager.executeWithConnection(async (client) => {
+    // Validate coordinates
+    const coordValidation = vncManager.validateCoordinates(client, args.x, args.y);
+    if (!coordValidation.valid) {
+      throw new Error(coordValidation.error!);
+    }
+
+    // RFB represents wheel motion as pointer button events: 4-7 for up/down/left/right.
+    const direction = args.direction || 'down';
+    const buttonMask = SCROLL_BUTTONS[direction];
+    if (buttonMask === undefined) {
+      throw new Error(`Invalid scroll direction "${direction}". Use one of: up, down, left, right`);
+    }
+
+    const requestedAmount = Number.isFinite(args.amount) ? args.amount! : 3;
+    const amount = Math.max(1, Math.min(Math.floor(requestedAmount), 600));
+
+    for (let i = 0; i < amount; i++) {
+      client.sendPointerEvent(args.x, args.y, buttonMask);
+      await sleep(5);
+      client.sendPointerEvent(args.x, args.y, 0);
+      await sleep(5);
+    }
+
+    const notch = amount === 1 ? 'notch' : 'notches';
+    return {
+      content: [{ type: 'text', text: `Scrolled ${direction} ${amount} ${notch} at (${args.x}, ${args.y})` }]
     };
   });
 }

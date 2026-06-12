@@ -14,6 +14,7 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 
 import { 
   handleClick, 
   handleMoveMouse, 
+  handleScroll,
   handleDrag,
   handleSwipe,
   handleKeyPress, 
@@ -70,6 +71,26 @@ export class VncMcpServer {
               properties: {
                 x: { type: 'number', description: 'X coordinate' },
                 y: { type: 'number', description: 'Y coordinate' }
+              },
+              required: ['x', 'y']
+            }
+          },
+          {
+            name: 'vnc_scroll',
+            description: 'Scroll the mouse wheel at the specified coordinates',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                x: { type: 'number', description: 'X coordinate' },
+                y: { type: 'number', description: 'Y coordinate' },
+                direction: { type: 'string', description: 'Scroll direction', enum: ['up', 'down', 'left', 'right'], default: 'down' },
+                amount: {
+                  type: 'number',
+                  description: 'Number of wheel notches to scroll',
+                  minimum: 1,
+                  maximum: 600,
+                  default: 3
+                }
               },
               required: ['x', 'y']
             }
@@ -197,6 +218,8 @@ export class VncMcpServer {
             return await handleClick(this.vncManager, args as any);
           case 'vnc_move_mouse':
             return await handleMoveMouse(this.vncManager, args as any);
+          case 'vnc_scroll':
+            return await handleScroll(this.vncManager, args as any);
           case 'vnc_drag':
             return await handleDrag(this.vncManager, args as any);
           case 'vnc_swipe':

@@ -34,6 +34,7 @@ process.on('unhandledRejection', (reason, promise) => {
 const config: VncConfig = {
   host: process.env.VNC_HOST || 'localhost',
   port: parseInt(process.env.VNC_PORT || '5900'),
+  username: process.env.VNC_USER,
   password: process.env.VNC_PASSWORD
 };
 

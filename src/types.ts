@@ -4,6 +4,7 @@ import { VncClient } from '@computernewb/nodejs-rfb';
 export interface VncConfig {
   host: string;
   port: number;
+  username?: string;
   password?: string;
 }
 
