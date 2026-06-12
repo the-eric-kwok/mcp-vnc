@@ -3,6 +3,22 @@ import { VncClient } from '@computernewb/nodejs-rfb';
 import { VncConnectionManager } from '../vnc/client.js';
 import { parseKeyInput, getKeysym, charNeedsShift, getUnshiftedChar } from '../vnc/keyboard.js';
 
+const POINTER_BUTTONS = {
+  'left': 0x01,
+  'right': 0x04,
+  'middle': 0x02
+};
+
+type PointerButton = keyof typeof POINTER_BUTTONS;
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getButtonMask(button?: string) {
+  return POINTER_BUTTONS[(button || 'left') as PointerButton] || POINTER_BUTTONS.left;
+}
+
 export async function handleClick(
   vncManager: VncConnectionManager, 
   args: { x: number; y: number; button?: string; double?: boolean }
@@ -14,29 +30,23 @@ export async function handleClick(
       throw new Error(coordValidation.error!);
     }
 
-    const buttonMap = {
-      'left': 0x01,
-      'right': 0x04,
-      'middle': 0x02
-    };
-
     const button = args.button || 'left';
     const isDouble = args.double || false;
-    const buttonMask = buttonMap[button as keyof typeof buttonMap] || buttonMap.left;
+    const buttonMask = getButtonMask(button);
 
     if (isDouble) {
       // Perform double-click: two quick clicks with short delay
       client.sendPointerEvent(args.x, args.y, buttonMask);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await sleep(50);
       client.sendPointerEvent(args.x, args.y, 0);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await sleep(50);
       client.sendPointerEvent(args.x, args.y, buttonMask);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await sleep(50);
       client.sendPointerEvent(args.x, args.y, 0);
     } else {
       // Single click
       client.sendPointerEvent(args.x, args.y, buttonMask);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await sleep(100);
       client.sendPointerEvent(args.x, args.y, 0);
     }
 
@@ -62,6 +72,68 @@ export async function handleMoveMouse(
 
     return {
       content: [{ type: 'text', text: `Moved mouse to (${args.x}, ${args.y})` }]
+    };
+  });
+}
+
+export async function handleDrag(
+  vncManager: VncConnectionManager,
+  args: { startX: number; startY: number; endX: number; endY: number; button?: string; durationMs?: number; steps?: number }
+) {
+  return performPointerDrag(vncManager, args, 'Dragged');
+}
+
+export async function handleSwipe(
+  vncManager: VncConnectionManager,
+  args: { startX: number; startY: number; endX: number; endY: number; durationMs?: number; steps?: number }
+) {
+  return performPointerDrag(vncManager, { ...args, button: 'left' }, 'Swiped');
+}
+
+async function performPointerDrag(
+  vncManager: VncConnectionManager,
+  args: { startX: number; startY: number; endX: number; endY: number; button?: string; durationMs?: number; steps?: number },
+  actionName: string
+) {
+  return vncManager.executeWithConnection(async (client) => {
+    for (const [label, x, y] of [
+      ['start', args.startX, args.startY],
+      ['end', args.endX, args.endY]
+    ] as const) {
+      const coordValidation = vncManager.validateCoordinates(client, x, y);
+      if (!coordValidation.valid) {
+        throw new Error(`${label} coordinate invalid: ${coordValidation.error}`);
+      }
+    }
+
+    const button = args.button || 'left';
+    const buttonMask = getButtonMask(button);
+    const durationMs = Math.max(0, Math.min(args.durationMs ?? 500, 30000));
+    const steps = Math.max(1, Math.min(Math.round(args.steps ?? 20), 300));
+    const stepDelay = steps > 0 ? durationMs / steps : 0;
+
+    client.sendPointerEvent(args.startX, args.startY, 0);
+    await sleep(30);
+    client.sendPointerEvent(args.startX, args.startY, buttonMask);
+
+    for (let step = 1; step <= steps; step++) {
+      const progress = step / steps;
+      const x = Math.round(args.startX + (args.endX - args.startX) * progress);
+      const y = Math.round(args.startY + (args.endY - args.startY) * progress);
+      if (stepDelay > 0) {
+        await sleep(stepDelay);
+      }
+      client.sendPointerEvent(x, y, buttonMask);
+    }
+
+    await sleep(30);
+    client.sendPointerEvent(args.endX, args.endY, 0);
+
+    return {
+      content: [{
+        type: 'text',
+        text: `${actionName} ${button} button from (${args.startX}, ${args.startY}) to (${args.endX}, ${args.endY}) over ${durationMs}ms in ${steps} steps`
+      }]
     };
   });
 }

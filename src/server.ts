@@ -14,6 +14,8 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 
 import { 
   handleClick, 
   handleMoveMouse, 
+  handleDrag,
+  handleSwipe,
   handleKeyPress, 
   handleTypeText, 
   handleTypeMultiline, 
@@ -70,6 +72,63 @@ export class VncMcpServer {
                 y: { type: 'number', description: 'Y coordinate' }
               },
               required: ['x', 'y']
+            }
+          },
+          {
+            name: 'vnc_drag',
+            description: 'Drag from one coordinate to another while holding a mouse button',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                startX: { type: 'number', description: 'Starting X coordinate' },
+                startY: { type: 'number', description: 'Starting Y coordinate' },
+                endX: { type: 'number', description: 'Ending X coordinate' },
+                endY: { type: 'number', description: 'Ending Y coordinate' },
+                button: { type: 'string', description: 'Mouse button to hold', enum: ['left', 'right', 'middle'], default: 'left' },
+                durationMs: {
+                  type: 'number',
+                  description: 'Drag duration in milliseconds',
+                  minimum: 0,
+                  maximum: 30000,
+                  default: 500
+                },
+                steps: {
+                  type: 'number',
+                  description: 'Number of interpolated pointer moves',
+                  minimum: 1,
+                  maximum: 300,
+                  default: 20
+                }
+              },
+              required: ['startX', 'startY', 'endX', 'endY']
+            }
+          },
+          {
+            name: 'vnc_swipe',
+            description: 'Swipe from one coordinate to another using the primary pointer button',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                startX: { type: 'number', description: 'Starting X coordinate' },
+                startY: { type: 'number', description: 'Starting Y coordinate' },
+                endX: { type: 'number', description: 'Ending X coordinate' },
+                endY: { type: 'number', description: 'Ending Y coordinate' },
+                durationMs: {
+                  type: 'number',
+                  description: 'Swipe duration in milliseconds',
+                  minimum: 0,
+                  maximum: 30000,
+                  default: 500
+                },
+                steps: {
+                  type: 'number',
+                  description: 'Number of interpolated pointer moves',
+                  minimum: 1,
+                  maximum: 300,
+                  default: 20
+                }
+              },
+              required: ['startX', 'startY', 'endX', 'endY']
             }
           },
           {
@@ -138,6 +197,10 @@ export class VncMcpServer {
             return await handleClick(this.vncManager, args as any);
           case 'vnc_move_mouse':
             return await handleMoveMouse(this.vncManager, args as any);
+          case 'vnc_drag':
+            return await handleDrag(this.vncManager, args as any);
+          case 'vnc_swipe':
+            return await handleSwipe(this.vncManager, args as any);
           case 'vnc_key_press':
             return await handleKeyPress(this.vncManager, args as any);
           case 'vnc_type_text':

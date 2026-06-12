@@ -106,6 +106,37 @@ The MCP server provides the following tools for remote desktop control:
 **Example:** `vnc_move_mouse(x=500, y=300)`
 </details>
 
+<details>
+<summary><strong>vnc_drag</strong> - Drag while holding a mouse button</summary>
+
+| Parameter | Required | Type | Description | Default |
+|-----------|----------|------|-------------|---------|
+| `startX` | ✅ | number | Starting X coordinate | - |
+| `startY` | ✅ | number | Starting Y coordinate | - |
+| `endX` | ✅ | number | Ending X coordinate | - |
+| `endY` | ✅ | number | Ending Y coordinate | - |
+| `button` | ❌ | string | Mouse button (`left`, `right`, `middle`) | `left` |
+| `durationMs` | ❌ | number | Drag duration in milliseconds | `500` |
+| `steps` | ❌ | number | Number of interpolated pointer moves | `20` |
+
+**Example:** `vnc_drag(startX=100, startY=600, endX=100, endY=200, durationMs=500, steps=20)`
+</details>
+
+<details>
+<summary><strong>vnc_swipe</strong> - Swipe from one coordinate to another</summary>
+
+| Parameter | Required | Type | Description | Default |
+|-----------|----------|------|-------------|---------|
+| `startX` | ✅ | number | Starting X coordinate | - |
+| `startY` | ✅ | number | Starting Y coordinate | - |
+| `endX` | ✅ | number | Ending X coordinate | - |
+| `endY` | ✅ | number | Ending Y coordinate | - |
+| `durationMs` | ❌ | number | Swipe duration in milliseconds | `500` |
+| `steps` | ❌ | number | Number of interpolated pointer moves | `20` |
+
+**Example:** `vnc_swipe(startX=200, startY=700, endX=200, endY=250, durationMs=400, steps=18)`
+</details>
+
 ### ⌨️ Keyboard Control
 
 <details>
